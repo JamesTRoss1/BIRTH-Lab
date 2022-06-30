@@ -9,10 +9,3 @@ def joyStickNeedleControl():
         yaw = thumb[0][1]  
         vel = [0, 0, z, 0, pitch, yaw] 
         return vel 
-        
-
-    # Close the window and quit.
-    # If you forget this line, the program will 'hang'
-    # on exit if running from IDLE.
-while True: 
-    print(str(joyStickNeedleControl()))
