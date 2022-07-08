@@ -17,7 +17,6 @@ import typing
 import math 
 import pathlib
 
-#UR_Move_RTDE.startup()
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 Curvature = []
 curvatureAngle = []
@@ -54,8 +53,8 @@ def needleIndexInsideGel(desiredSlopeX: float, desiredSlopeY: float, desiredSlop
     global shapeZ
     tolerance = .05 #Percentage of tolerance used in slope calculation 
     foundSlopeIndices = []
-    for final in range(len(shapeX), 1, -1): 
-        for initial in range(final - 1, 1, -1):
+    for final in range(len(shapeX) - 1, 1, -1): 
+        for initial in range(final - 1, 0, -1):
             if (
                 ((desiredSlopeX - (desiredSlopeX * tolerance)) < shapeX[final] - shapeX[initial] < (desiredSlopeX + (desiredSlopeX * tolerance))) and 
                 ((desiredSlopeY - (desiredSlopeY * tolerance)) < shapeY[final] - shapeY[initial] < (desiredSlopeY + (desiredSlopeY * tolerance))) and 
@@ -91,50 +90,8 @@ def graphNeedle():
     slopeX = 0
     slopeY = 0
     slopeZ = 0 
+    tcp()
     return translateRealToGraph(needleIndexInsideGel(slopeX, slopeY, slopeZ))
-
-#method only to be run once 
-def graphStart(theFile, offsetX, offsetY, offsetZ):
-    global graphUtil
-    figure = pyplot.figure()
-    graphUtil.append(figure)
-    axes = mplot3d.Axes3d(figure)
-    graphUtil.append(axes)
-    if theFile != None and os.path.exists(theFile):
-        mesh = mesh.Mesh.from_file(theFile)
-    #Compute the vector offset here instead of during normal graph method 
-        mesh.x += offsetX
-        mesh.y += offsetY
-        mesh.z += offsetZ
-        graphUtil.append(mesh)
-
-def graph(offsetX, offsetY, offsetZ):
-    global shapeX
-    global shapeY
-    global shapeZ 
-    global graphUtil
-
-    graphList = []
-    #Possibily create a timer in order to limit frame rate
-    
-    for i in range(0, len(shapeX)):
-        shapeX[i] = shapeX[i] - offsetX
-        #if box is lower than fbgs then add 
-        shapeY[i] = shapeY[i] + offsetY
-        if shapeZ[i] <= 2.5 and shapeZ[i] >= -2.5:
-            if shapeY[i] <= 5 and shapeY[i] >= 0:
-                if shapeX[i] <= 5 and shapeX[i] >= 0:
-                    shapeZ[i] = shapeZ[i] + 2.5 
-                    graphList.append([shapeX[i], shapeY[i], shapeZ[i]])
-                else:
-                    continue 
-            else:
-                continue 
-        else:
-            continue  
-
-
-
 
 def angles():
     global shapeX
@@ -255,11 +212,6 @@ def tcp():
                     shapeX = data[startX:endX]                     
                     shapeY = data[startY:endY]
                     shapeZ = data[startZ:endZ]
-                    #Shape Z Index 808
-                    #Shape Y Index 519 
-                    #Shape X Index 230 
-                    #Curvature [1/cm] 188 
-                    #Curvature angle 209
                     setX(shapeX)
                     setY(shapeY) 
                     setZ(shapeZ)
@@ -333,24 +285,5 @@ def averageAngle(size):
     angleZ = angleZ / size
     return angleX, angleY, angleZ
 
-startup()
-parseData()
-while True:
-    angleX, angleY, angleZ = averageAngle(10) 
 
-    print(math.degrees(angleX), math.degrees(angleY), math.degrees(angleZ))
-# pose = [0,0,0,0,0,0]
-# pose_wrt_base = UR_Move_RTDE.rtde__c.poseTrans(UR_Move_RTDE.rtde__r.getActualTCPPose(), pose)
-# print(str(pose_wrt_base))
-# pose = [0,0,0,0,0,0]
-# pose_wrt_base = UR_Move_RTDE.rtde__c.poseTrans(pose, UR_Move_RTDE.rtde__r.getActualTCPPose())
-# print(str(pose_wrt_base))
-# print(str(UR_Move_RTDE.rtde__r.getActualTCPPose()))
-# print(str(rotvec2rpy(pose_wrt_base[3:], degreesFlag=False)))
-#UR_Move_RTDE.rtde__c.moveL(pose_wrt_base)
-#BIG COMMENT: YO FUTURE JAMES, THE DANG ROBOT IS IN METERS.  
-#print(str( UR_Move_RTDE.rtde__r.getActualTCPPose()))
-#UR_Move_RTDE.rtde__c.moveL(pose_wrt_base)
-# UR_Move_RTDE.rtde__c.moveL(pose_wrt_base)
-#UR_Move_RTDE.quit()
 
