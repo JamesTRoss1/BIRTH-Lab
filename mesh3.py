@@ -9,6 +9,7 @@ from vispy.visuals.transforms import (STTransform, MatrixTransform,
                                   ChainTransform)
 from vispy.util.quaternion import Quaternion
 from vispy.scene.events import SceneMouseEvent
+import TCP_Client 
 import trimesh
 from vispy.util.event import *
 import vispy.scene
@@ -25,6 +26,7 @@ from functools import partial
 import pathlib
 import subprocess
 from vispy.app.qt import QtSceneCanvas
+from scipy.spatial.transform import Rotation as R
 
 LINE = None
 ui = None
@@ -32,7 +34,9 @@ startTime = 0
 testNum = 0
 xyz = None
 view = None
-initalPose = None
+initialPose = None
+initialNeedleRotation = None 
+initialRotation = None 
 initialPoseBool = False
 Plot3D = None
 file = ""
@@ -51,62 +55,34 @@ class MyCanvas(vispy.app.qt.QtSceneCanvas):
         self.meshes = []
         self.view = self.central_widget.add_view()
         self.view.camera = 'fly'
+        self.firstView = True 
         self.view.camera.fov = 90
         self.view.camera.scale_factor = 2.0
         self.view.camera.interactive = True
         self.view.camera.zoom_factor = 0
         self.view.camera.auto_roll = False
-        #view.camera.distance = 0
-        #view.camera.center = (-.491, -.493, .1508)
-        #os.abort()
-        #Keys: L is pan right; j is pan right; i is pan up; k is pan down
-        #view.camera.center = (-73.979935, -63.755707, 10.842972)
         varMesh = trimesh.load(file)
         print(str(varMesh.vertices))
-        #maxValue = np.max(np.array(mesh.vertices))
-        #print(str(maxValue))
-        #mesh.apply_scale(1/maxValue)
         print(str(varMesh.vertices))
-        #os.abort()
-        #group = EmitterGroup(source=None, auto_connect=False)
-        #mouseEvent = EventEmitter(Event("mouse_press"), view.scene)
-        #print(str(type(mouseEvent)))
-        #group.add(mouse_press=mouseEvent)
-        #group.connect(self.needleStart)
         self.connect(self.on_key_press)
         mdata = geometry.MeshData(varMesh.vertices, varMesh.faces)
         print(str(varMesh.vertices))
         self.meshes.append(Mesh(meshdata=mdata, shading='smooth', color=(1,0,0,.6), parent=self.view.scene))
         self.timer = vispy.app.Timer(connect = self.line)
-        self.timer.start(0.001)
-        #self.timer = app.Timer(connect=self.pos)
-        #self.timer.start(.001)
-        #ax = AxisWidget()
-        finalArr = list(self.view.camera.center)
-        initalPose = list(self.view.camera.center)
-        for i in range(0, len(finalArr)):
-             finalArr[i] = finalArr[i] + 1
-        x1 = initalPose[0]
-        x2 = finalArr[0]
-        y1 = initalPose[1]
-        y2 = finalArr[1]
-        z1 = initalPose[2]
-        z2 = finalArr[2]
-        xyz = XYZAxis(pos = np.array([[x1, y1, z1], [x2, y1, z1], [x1, y1, z1], [x1, y2, z1], [x1, y1, z1], [x1, y1, z2]]), parent=self.view.scene)
-
-        #self.freeze()
-        arr = [[-57, -47, 21], [-57, -47, 21], [-53, -47, 21], [-50, -47, 21], [-47, -47, 21], [-44, -47, 21], [-41, -47, 21], [-38, -47, 21], [-34, -47, 21], [-31, -47, 21]]
-        LINE = Plot3D(arr, width=2, color='red', edge_color='w', symbol='o', face_color=(.2, .2, 1, .8), parent=self.view.scene)
+        self.timer.start(0.01)
 
     def on_key_press(self, key):
         global initialPoseBool
         global view
-        global initalPose
+        global initialPose
+        global initialNeedleRotation
+        global initialRotation
         if ord(key.text) == 13:
             print(str(self.view.camera.center))
-
         if ord(key.text) == 13 and initialPoseBool == False:
-            initalPose = self.view.camera.center
+            initialPose = self.view.camera.center
+            initialRotation = self.view.rotation1 
+            initialNeedleRotation = TCP_Client.tcp()
             initialPoseBool = True
         if ord(key.text) == 43:
             self.view.camera.scale_factor = self.view.camera.scale_factor + 1
@@ -114,70 +90,40 @@ class MyCanvas(vispy.app.qt.QtSceneCanvas):
             if self.view.camera.scale_factor - 1 > 0:
                 self.view.camera.scale_factor = self.view.camera.scale_factor - 1
 
-    def needleStart(self):
-        print("HERE")
-
-    def pos(self, event):
-        global view
-        print(str(self.view.camera.center))
-
     def line(self, event):
         global startTime
         global view
         global xyz
         global testNum
         global LINE
+        global initialPose
         global Plot3D
-        testNum += 1
-        #LINE.parent = None
-        arr = [[-57, -47, 21], [-57, -47, 21], [-53, -47, 21], [-50, -47, 21], [-47, -47, 21], [-44, -47, 21], [-41, -47, 21], [-38 + testNum, -47, 21], [-34 + testNum, -47, 21], [-31 + testNum, -47, 21]]
-        finalArr = list(self.view.camera.center)
-        initalPose = list(self.view.camera.center)
-        for i in range(0, len(finalArr)):
-            initalPose[i] = initalPose[i] + .1
-            finalArr[i] = finalArr[i] + .3
-        x1 = initalPose[0]
-        x2 = finalArr[0]
-        y1 = initalPose[1]
-        y2 = finalArr[1]
-        z1 = initalPose[2]
-        z2 = finalArr[2]
-        if testNum % 1000 == 0:
-            print("HERE")
-            xyz.parent = None
-        #xyz = XYZAxis(pos = np.array([[x1, y1, z1], [x2, y1, z1], [x1, y1, z1], [x1, y2, z1], [x1, y1, z1], [x1, y1, z2]]), parent=view.scene)
-            xyz = XYZAxis(pos = np.array([[x1, y1, z1], [x2, y1, z1], [x1, y1, z1], [x1, y2, z1], [x1, y1, z1], [x1, y1, z2]]), parent=self.view.scene)
-            self.view.update()
-        #LINE = Plot3D(arr, width=2, color='red', edge_color='w', symbol='o', face_color=(.2, .2, 1, .8), parent=view.scene)
-        #view.camera.rotation1 = q
-        #if testNum <= .01:
-        #    view.camera.view_changed()
-        #    print("HERE")
-        #print("\n\n")
-        #print(str(view.camera.rotation1))
-        #print(str(view.camera.rotation2))
-        #print(str(view.camera.center))
-        #print("\n")
-        #print(str(view.camera.transform))
-        #print(str(view.camera.get_range()))
-        #iew.camera.rotation2 = q
-        #up, forward, right = view.camera._get_dim_vectors()
-        #print(dir(view.camera.transform))
-        #print(dir(view.camera))
-        #view.camera._update_projection_transform(10,10)
-        #os.abort()
-        #print(view.camera.transform.rotate(0, axis=(1,0,0)))
-        #print(view.camera.transform.rotate(.1, axis=(0,1,0)))
-        #print(str(view.camera.rotation1))
-        #print(str(view.camera.rotation2))
-        #view.camera.rotation1 = q
-        #view.camera.rotation2 = q
-        #self.update()
+        global initialRotation
 
-    #view.camera.center = (view.camera.center[0] + .1, view.camera.center[1] + .1, view.camera.center[2] - .1)
-    #looks like it is possible to set rotation (must be quaterion)
-    #print(str(view.camera.rotation1))
-    #print(str(view.camera.rotation2))
+        if self.firstView == True: 
+            rpy_ = TCP_Client.tcp()
+            xPoints, yPoints, zPoints = TCP_Client.graphNeedle() #Last element in returned list is the 3d point representation of the needle tip
+            length_ = len(xPoints) - 1
+            self.view.camera.center = (xPoints[length_] + initialPose[0], yPoints[length_] + initialPose[1], zPoints[length_] + initialPose[2])
+            changeP = rpy_[1] - initialNeedleRotation[1]
+            changeY = rpy_[2] - initialNeedleRotation[2]
+            #rpy2quat returns a quaternion in x,y,z,w format 
+            #Vispy Quaternion constructor is in w,x,y,z format
+            #Might need to call Quaternion.conjugate if the rpy2quat is opposite 
+            RPY_Quat = rpy2quat([0, changeP, changeY], False)
+            needleQuat = Quaternion(w=RPY_Quat[3], x=RPY_Quat[0], y=RPY_Quat[1], z=RPY_Quat[2]) 
+            newQuatArr = needleQuat * initialRotation #Quat multiplication necessary to add two together 
+            self.view.camera.rotation1 = newQuatArr
+            self.view.camera.view_changed()
+            
+        else: 
+            arr = []
+            LINE.parent = None 
+            xPoints, yPoints, zPoints = TCP_Client.graphNeedle()
+            for i in range(0, len(xPoints)):
+                temp = [xPoints[i] + initialPose[0], yPoints[i] + initialPose[1], zPoints[i] + initialPose[2]]
+                arr.append(temp) 
+            LINE = Plot3D(arr, width=2, color='blue', edge_color='white', symbol='o', face_color=(.2, .2, 1, .8), parent=self.view.scene)
 
 class Color(QWidget):
     def __init__(self, color):
@@ -267,13 +213,13 @@ class Ui_MainWindow(QWidget):
         self.pushButton1.show()
 
     def finished_input(self, canvas, ip = "", offset = 0):
-        global file
         self.pushButton.hide()
         self.pushButton1.hide()
         self.label.hide()
         canvas1 = MyCanvas()
-        file = r"C:\Users\Birth\OneDrive\Documents\BIRTH\heart1.stl"
         canvas2 = MyCanvas()
+        TCP_Client.startup()    #Startup TCP. This may not be the right line to put this 
+        TCP_Client.parseData()
         lay = QGridLayout() #Choose gridlayout for vispy
         self.centralwidget.setLayout(lay)
         #lay.addWidget(Color('red'), 0, 0, 1, 3) # y, x, span along y, span along x
@@ -282,9 +228,17 @@ class Ui_MainWindow(QWidget):
         lay.addWidget(canvas2, 1, 2, 3, 2)
         self.pushButton.hide()
 
+def rpy2quat(rpy, degrees=False):
+    r = R.from_euler('ZYX', rpy, degrees=degrees)
+    return r.as_quat()
 
-def end():
-    print("STOPPING EVERYTHING")
+def quaternion_multiply(quaternion1, quaternion0):
+    w0, x0, y0, z0 = quaternion0
+    w1, x1, y1, z1 = quaternion1
+    return np.array([-x1 * x0 - y1 * y0 - z1 * z0 + w1 * w0,
+                     x1 * w0 + y1 * z0 - z1 * y0 + w1 * x0,
+                     -x1 * z0 + y1 * w0 + z1 * x0 + w1 * y0,
+                     x1 * y0 - y1 * x0 + z1 * w0 + w1 * z0], dtype=np.float64)
 
 
 if __name__ == "__main__":
