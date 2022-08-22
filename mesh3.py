@@ -2,18 +2,22 @@ import numpy as np
 import vispy
 from vispy import app, gloo, geometry, io, visuals, scene
 vispy.use('PyQt5')
+from vispy.app.canvas import KeyEvent
 from vispy.geometry import create_sphere
 import math
+import copy
 from vispy.scene.visuals import Mesh
 from vispy.visuals.transforms import (STTransform, MatrixTransform,
                                   ChainTransform)
 from vispy.util.quaternion import Quaternion
 from vispy.scene.events import SceneMouseEvent
+from vispy.util.keys import Key
 import trimesh
-import TCP_Client
+#import TCP_Client_Test
+#import xboxVel #uncomment when using xbox controller
 from vispy.util.event import *
 import vispy.scene
-from vispy.scene.visuals import XYZAxis
+from vispy.scene.visuals import XYZAxis, Tube
 from vispy.scene.widgets.axis import AxisWidget
 import time
 import os
@@ -36,6 +40,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
+
 LINE = None
 ui = None
 startTime = 0
@@ -51,6 +56,14 @@ canvas2 = None
 shading_filter = None
 wireframe_filter = None
 file = ""
+POS = None
+sumP = 0
+axes = None
+TUBE = None
+sumY = 0
+xboxPoints = []
+SCALE = None
+axes3 = None
 
 class MyCanvas(vispy.app.qt.QtSceneCanvas):
 
@@ -61,7 +74,6 @@ class MyCanvas(vispy.app.qt.QtSceneCanvas):
         global Plot3D
         global xyz
         global wireframe_filter
-        global shading_filter
         global initialPose
         self.firstView = firstView
         print(str(id(self)) + " : " + str(firstView))
@@ -76,8 +88,8 @@ class MyCanvas(vispy.app.qt.QtSceneCanvas):
         self.view = self.central_widget.add_view()
         self.view.camera = 'fly'
         self.view.camera.fov = 90
-        self.view.camera.scale_factor = 2.0
-        self.view.camera.zoom_factor = 0
+        self.view.camera.scale_factor = 1.0
+        self.view.camera.zoom_factor = -1
         self.view.camera.center = (0,0,0)
         #x:90-forward is z; y:90- forward x; z:90-forward y
         self.view.camera.rotation1 = Quaternion.create_from_euler_angles(90,90,0, True)
@@ -85,7 +97,7 @@ class MyCanvas(vispy.app.qt.QtSceneCanvas):
             self.view.camera.interactive = True
             self.view.camera.auto_roll = True
         else:
-            self.view.camera.interactive = False
+            self.view.camera.interactive = True
             self.view.camera.auto_roll = False
         varMesh = trimesh.load(file)
         print(str(varMesh.vertices))
@@ -96,22 +108,124 @@ class MyCanvas(vispy.app.qt.QtSceneCanvas):
         mdata = geometry.MeshData(varMesh.vertices, varMesh.faces)
         print(str(varMesh.vertices))
         if firstView:
-            self.mesh = Mesh(meshdata=mdata, shading='flat', color=(1,0,0,.6), parent=self.view.scene)
+            self.mesh = Mesh(meshdata=mdata, shading=None, color=(1,0,0,.6), parent=self.view.scene)
+            self.shading_filter = ShadingFilter(shading='flat', diffuse_light=(1,1,1,.7), ambient_light = (1, 1, 1, .4), specular_light = (1,1,1,.5), shininess=30)
+            self.mesh.attach(self.shading_filter)
+
         if not firstView:
             self.mesh = Mesh(meshdata=mdata, shading=None, color=(1,1,1,1), parent=self.view.scene)
-            wireframe_filter = WireframeFilter(wireframe_only=True, color='white', width=2)
-            self.mesh.attach(wireframe_filter)
+            self.wireframe_filter = WireframeFilter(wireframe_only=True, color='white', width=2)
+            self.mesh.attach(self.wireframe_filter)
             #self.mesh.attach(ColorFilter(filter = (.2, .2, 1, 1)))
             #self.mesh.attach(Alpha(.7))
-            shading_filter = ShadingFilter(shading='flat', diffuse_light=(1,1,1,.9))
-            self.mesh.attach(shading_filter)
+            self.shading_filter = ShadingFilter(shading='flat', diffuse_light=(1,1,1,.9))
+            self.mesh.attach(self.shading_filter)
+
+        self.attach_headlight()
         self.timer = vispy.app.Timer(connect = self.wait)
         self.timer.start(0.1)
         finalArr = list(self.view.camera.center)
         initialPose = list(self.view.camera.center)
 
+    def attach_headlight(self):
+        light_dir = (0, 1, 0, 0)
+        self.shading_filter.light_dir = light_dir[:3]
+        initial_light_dir = self.view.camera.transform.imap(light_dir)
+
+        @self.view.scene.transform.changed.connect
+        def on_transform_change(event):
+            transform = self.view.camera.transform
+            self.shading_filter.light_dir = transform.map(initial_light_dir)[:3]
+
     def wait(self, event):
-        print("Waiting")
+        global canvas1
+        global counter
+        global axes
+        global POS
+        global SCALE
+        global TUBE
+        global axes3
+        #change scale factor if you need the fly camera to move at a specific speed
+        counter = counter + 1
+
+        new_pos = None
+        if counter < 5000000:
+            print(str(canvas1.view.camera.zoom_factor))
+            pose = _get_position(1, 0, 0, .1)
+            canvas1.view.camera.center = pose
+            axes_pos2 = _get_position(2, 0, 0, .1)
+            pos2 = list(axes_pos2)
+            xpos2 = copy.copy(pos2)
+            xpos2[0] = xpos2[0] + .5
+            ypos2 = copy.copy(pos2)
+            ypos2[1] = ypos2[1] + .5
+            zpos2 = copy.copy(pos2)
+            zpos2[2] = zpos2[2] + .5
+            new_pos = np.array([
+            pos2, xpos2, pos2, ypos2, pos2, zpos2
+            ])
+
+            #Position of the 1st person camera on the 3rd person canvas
+            pos3 = list(canvas1.view.camera.center)
+            xpos3 = copy.copy(pos3)
+            xpos3[0] = xpos3[0] + 1
+            ypos3 = copy.copy(pos3)
+            ypos3[1] = ypos3[1] + 1
+            zpos3 = copy.copy(pos3)
+            zpos3[2] = zpos3[2] + 1
+            new_pos2 = np.array([
+            pos3, xpos3, pos3, ypos3, pos3, zpos3
+            ])
+
+            if hasattr(axes, 'parent'):
+                axes.parent = None
+                axes = XYZAxis(parent=canvas1.view.scene, pos=new_pos)
+                axes3.parent = None
+                axes3 = XYZAxis(parent=canvas2.view.scene, pos=new_pos2)
+            else:
+                axes = XYZAxis(parent=canvas1.view.scene)
+                axes3 = XYZAxis(parent=canvas2.view.scene)
+
+
+            farCenter = _get_position(200, 0, 0, .1)
+            startTube = _get_position(0, 1.5, -1.5, .1)
+            _changeX = (farCenter[0] - startTube[0]) * .05
+            _changeY = (farCenter[1] - startTube[1]) * .05
+            _changeZ = (farCenter[2] - startTube[2]) * .05
+            endTube = ((_changeX) + startTube[0], (_changeY) + startTube[1], (_changeZ) + startTube[2])
+            tubeArr = np.array([
+            startTube, endTube
+            ])
+            print("TUBE ARR: " + str(tubeArr))
+            print("CENTER: " + str(canvas1.view.camera.center))
+
+            #TUBE IS ABOUT 1 CENTIMETER IN LENGTH
+            if hasattr(TUBE, 'parent'):
+                TUBE.parent = None
+                TUBE = Tube(points=tubeArr, radius=.01, color= "blue", parent=canvas1.view.scene)
+
+            else:
+                TUBE = Tube(points=tubeArr, radius=.01, color= "blue", parent=canvas1.view.scene)
+
+            #keyEvent = KeyEvent("key_press", key=Key('W'), text='W')
+            #canvas1.view.camera.viewbox_key_event(keyEvent)
+            #scalePoints = _get_position(2, 1.0, -1.5 ,.1)
+            #yPos2 = _get_position(2, 2, -1.5, .1)
+            #scale_points = np.array([
+            #scalePoints, scalePoints, scalePoints, yPos2, scalePoints, scalePoints
+            #])
+            #if hasattr(SCALE, 'parent'):
+            #    SCALE.parent = None
+            #    SCALE = Plot3D(scale_points, width=1, color=(1,1,1,1), edge_color=(1, 1, 1, 1), face_color=(1, 1, 1, 1), parent=canvas1.view.scene)
+            #else:
+            #    SCALE = Plot3D(parent=canvas1.view.scene)
+
+
+        else:
+            pass
+            #keyEvent = KeyEvent("key_release", key=Key('W'), text='W')
+            #canvas1.view.camera.viewbox_key_event(keyEvent)
+            #canvas1.view.camera.view_changed()
 
     def on_key_press(self, key):
         global initialPoseBool
@@ -122,6 +236,7 @@ class MyCanvas(vispy.app.qt.QtSceneCanvas):
         global canvas1
         global canvas2
         global wireframe_filter
+        print("KEY: " + str(key.text))
         if ord(key.text) == 13:
             print("CENTER: " + str(self.view.camera.center))
             print("Rotation: " + str(self.view.camera.rotation1))
@@ -132,18 +247,22 @@ class MyCanvas(vispy.app.qt.QtSceneCanvas):
             initialPoseBool = True
             initialPose = list(canvas1.view.camera.center)
             initialRotation = canvas2.view.camera.rotation1
-            initialNeedleRotation = (0, 0, 0) #Call tcp angles before running
-            TCP_Client.startup()
-            TCP
+            #TCP_Client.startup()
+            #initialNeedleRotation = TCP_Client.tcp()
+            initialNeedleRotation = (0,0,0) #COMMENT OUT WHEN USING TCP_cLIENT MODULE
             canvas1.timer.stop()
             canvas1.timer = vispy.app.Timer(connect = canvas1.line)
             canvas1.timer.start(0.05)
             self.timer.stop()
             print("ID FROM THE ENTER: " + str(id(self)))
-
-        if ord(key.text) == 43:
+        #if key.text == ".":
+        #    canvas1.view.camera.zoom_factor = canvas1.view.camera.zoom_factor + 1
+        #if key.text == ",":
+        #    if canvas1.view.camera.zoom_factor - 1 > 0:
+        #        canvas1.view.camera.zoom_factor = canvas1.view.camera.zoom_factor - 1
+        if key.text == "+" or key.text == "=":
             self.view.camera.scale_factor = self.view.camera.scale_factor + 1
-        if ord(key.text) == 45:
+        if key.text == "-":
             if self.view.camera.scale_factor - 1 > 0:
                 self.view.camera.scale_factor = self.view.camera.scale_factor - 1
         if key.text == ";":
@@ -172,28 +291,24 @@ class MyCanvas(vispy.app.qt.QtSceneCanvas):
         global counter
         global canvas1
         global canvas2
-        counter = counter + 5
-        if counter % 100 != 0:
-            return
+        global sumP
+        global sumY
+        global xboxPoints
+
         xPoints = []
         yPoints = []
         zPoints = []
         #TCP_Client_Test.testTcp(counter // 100)
         #points, origin = TCP_Client_Test.needleBySlope() #first 3 elements in returned list is the 3d point representation of the needle tip; last is new origin
-        TCP_Client.tcp()
-        points = TCP_Client.needleByGradient()
-
-        #MAKE SURE THAT THE POINTS MATCH THE COORDINATE FRAME OF THE VISPY CANVAS
-        for point in range(0, len(points)):
-            xPoints.append(points[point][0])
-            yPoints.append(points[point][1])
-            zPoints.append(points[point][2])
-        length_ = len(xPoints) - 1
-        self.view.camera.center = (xPoints[length_] + initialPose[0], yPoints[length_] + initialPose[1], zPoints[length_] + initialPose[2])
-        #rpy_ = TCP_Client_Test.angles()
-        rpy_ = (0, counter // 100, counter // 100)
-        changeP = rpy_[1] - initialNeedleRotation[1]
-        changeY = rpy_[2] - initialNeedleRotation[2]
+        #rpy_ = TCP_Client.tcp()
+        #points = TCP_Client.needleByGradient()
+        points = xboxVel.joyStickNeedleControl(0,0,0,0,0,0)
+        rpy_ = (0, points[4] * .1, points[5] * .1)
+        changeP = rpy_[1]
+        changeY = rpy_[2]
+        #
+        #changeP = rpy_[1] - initialNeedleRotation[1]
+        #changeY = rpy_[2] - initialNeedleRotation[2]
             #rpy2quat returns a quaternion in x,y,z,w format
             #Vispy Quaternion constructor is in w,x,y,z format
             #Might need to call Quaternion.conjugate if the rpy2quat is opposite
@@ -203,22 +318,57 @@ class MyCanvas(vispy.app.qt.QtSceneCanvas):
         #x forward is positive
         #y to the left is positive
         #z upwards is positive
-        needleQuat = Quaternion.create_from_euler_angles(0, changeP, changeY, True)
+        sumP = sumP + changeP
+        sumY = sumY + changeY
+        # matrix = MatrixRotation(0, 180 - sumY, 180 + sumP)
+        matrix = MatrixRotation(0, sumY, 0)
+
+        needleQuat = Quaternion.create_from_euler_angles(0, sumP, sumY, True)
+        #newQuatArr = needleQuat
         newQuatArr = needleQuat * initialRotation #Quat multiplication necessary to add two together
+        #initialRotation = rpy
+        thePoints = np.array([points[2], 0, 0]).reshape(3,1)
+        points = np.dot(matrix, thePoints)
+        print("POINTS")
+        print(str(points))
+        print("DA POINTS")
+        print(str(thePoints))
+        print("MATRIX")
+        print(str(matrix))
+        xPoints.append(points[0] * .1)
+        yPoints.append(points[1] * .1)
+        zPoints.append(points[2] * .1)
+
+
+        #XBOX DEMO
+        #MAKE SURE THAT THE POINTS MATCH THE COORDINATE FRAME OF THE VISPY CANVAS
+        #for point in range(0, len(points)):
+        #    xPoints.append(points[point][0])
+        #    yPoints.append(points[point][1])
+        #    zPoints.append(points[point][2])
+        length_ = len(xPoints) - 1
+        self.view.camera.center = (xPoints[length_] + initialPose[0], yPoints[length_] + initialPose[1], zPoints[length_] + initialPose[2])
+        initialPose = self.view.camera.center
+        counter = counter + 1
+        if counter % 10 == 0:
+            if len(xboxPoints) > 10:
+                xboxPoints.pop(0)
+                xboxPoints.append(self.view.camera.center)
+            else:
+                xboxPoints.append(self.view.camera.center)
+
         self.view.camera.rotation1 = newQuatArr
         self.view.camera.view_changed()
 
         #CANVAS 2 LOGIC
-        arr = []
-        if LINE is not None:
-            LINE = None
-        for i in range(0, len(xPoints)):
-            temp = [xPoints[i] + initialPose[0], yPoints[i] + initialPose[1], zPoints[i] + initialPose[2]]
-            arr.append(temp)
+        arr = xboxPoints
+        #arr = []
+        if hasattr(LINE, 'parent'):
+            LINE.parent = None
+        #for i in range(0, len(xPoints)):
+        #    temp = [xPoints[i] + initialPose[0], yPoints[i] + initialPose[1], zPoints[i] + initialPose[2]]
+        #    arr.append(temp)
         LINE = Plot3D(arr, width=3, color=(0,0,1,1), edge_color=(1, 1, 1, 1), symbol='o', face_color=(.2, .2, 1, 1), parent=canvas2.view.scene)
-        LINE.order = 2
-        canvas2.mesh.mesh_data_changed()
-        canvas2.view.camera.view_changed()
 
 class MplCanvas(FigureCanvasQTAgg):
 
@@ -323,9 +473,6 @@ class Ui_MainWindow(QWidget):
         self.label.hide()
         canvas1 = MyCanvas(firstView=True)
         canvas2 = MyCanvas(firstView=False)
-        print("CANVAS 1: " + str(id(canvas1)))
-        print("CANVAS 2: " + str(id(canvas2)))
-        file = r"C:\Users\Birth\OneDrive\Documents\BIRTH\heart1.stl"
         lay = QGridLayout() #Choose gridlayout for vispy
         self.centralwidget.setLayout(lay)
         #lay.addWidget(Color('red'), 0, 0, 1, 3) # y, x, span along y, span along x
@@ -335,16 +482,38 @@ class Ui_MainWindow(QWidget):
         self.pushButton.hide()
 
 
-def end():
-    print("STOPPING EVERYTHING")
+def MatrixRotation(roll, pitch, yaw):
+    pitch = math.radians(pitch)
+    roll = math.radians(roll)
+    yaw = math.radians(yaw)
+    return np.array([math.cos(pitch) * math.cos(yaw), -math.sin(yaw), math.sin(pitch) * math.cos(yaw), math.cos(pitch) * math.sin(yaw), math.cos(yaw), math.sin(pitch) * math.sin(yaw), -math.sin(pitch), 0, math.cos(pitch)]).reshape(3,3)
+
+def _get_position(px, py, pz, dt):
+    global canvas1
+    pf, pr, pl, pu = canvas1.view.camera._get_directions()
+    rel_speed = dt
+    # Create speed vectors, use scale_factor as a reference
+    dv = np.array([1.0/d for d in canvas1.view.camera._flip_factors])
+    #
+    vf = pf * dv * rel_speed * canvas1.view.camera._scale_factor
+    vr = pr * dv * rel_speed * canvas1.view.camera._scale_factor
+    vu = pu * dv * rel_speed * canvas1.view.camera._scale_factor
+    direction = vf, vr, vu
+
+    # Set position
+    center_loc = np.array(canvas1.view.camera._center, dtype='float32')
+    center_loc += (px * direction[0] +
+                   py * direction[1] +
+                   pz * direction[2])
+    return tuple(center_loc)
 
 if __name__ == "__main__":
     #first thing is to get initial positions from fbgs
-    TCP_Client.startup()
-    TCP_Client.parseData()
-    TCP_Client.tcp()
-    TCP_Client.gradientInit()
-    TCP_Client.closeTCP()
+    #TCP_Client.startup()
+    #TCP_Client.parseData()
+    #TCP_Client.tcp()
+    #TCP_Client.gradientInit()
+    #TCP_Client.closeTCP()
     app = QApplication(sys.argv)
     MainWindow = QMainWindow()
     ui = Ui_MainWindow()
