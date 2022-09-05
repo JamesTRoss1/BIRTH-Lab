@@ -5,6 +5,7 @@ vispy.use('PyQt5')
 from vispy.app.canvas import KeyEvent
 from vispy.geometry import create_sphere
 import math
+import control
 import copy
 from vispy.scene.visuals import Mesh
 from vispy.visuals.transforms import (STTransform, MatrixTransform,
@@ -17,7 +18,7 @@ import trimesh
 #import xboxVel #uncomment when using xbox controller
 from vispy.util.event import *
 import vispy.scene
-from vispy.scene.visuals import XYZAxis, Tube
+from vispy.scene.visuals import XYZAxis, Tube, Line
 from vispy.scene.widgets.axis import AxisWidget
 import time
 import os
@@ -42,6 +43,8 @@ import matplotlib.pyplot as plt
 
 
 LINE = None
+wayPointComplete = False
+wayPoints = []
 ui = None
 startTime = 0
 testNum = 0
@@ -52,6 +55,8 @@ initialPoseBool = False
 Plot3D = scene.visuals.create_visual_node(visuals.LinePlotVisual)
 canvas1 = None
 counter = 0
+WARNING_TUBE = None
+WARNING_TUBE2 = None
 canvas2 = None
 shading_filter = None
 wireframe_filter = None
@@ -144,16 +149,31 @@ class MyCanvas(vispy.app.qt.QtSceneCanvas):
         global POS
         global SCALE
         global TUBE
+        global WARNING_TUBE
+        global WARNING_TUBE2
         global axes3
         #change scale factor if you need the fly camera to move at a specific speed
         counter = counter + 1
+        wayPoint_ = False
+        finish_ = False
 
         new_pos = None
-        if counter < 5000000:
-            print(str(canvas1.view.camera.zoom_factor))
-            pose = _get_position(1, 0, 0, .1)
-            canvas1.view.camera.center = pose
-            axes_pos2 = _get_position(2, 0, 0, .1)
+        if 1:
+            vel_, wayPoint_, finish_ = control.joyStickNeedleControl()
+            #vel_ = [0,0,1,0,0,0]
+            wayPoint_ = False
+            finish_ = False
+            if vel_[2] == 1:
+                pose = _get_position(1, 0, 0, .1)
+                canvas1.view.camera.center = pose
+            if vel_[2] == -1:
+                pose = _get_position(-1, 0, 0, .1)
+                canvas1.view.camera.center = pose
+            if wayPoint_ == True:
+                self.on_controller_press("-")
+            if finish_ == True:
+                self.on_controller_press("x")
+            axes_pos2 = _get_position(3, 0, 0, .1)
             pos2 = list(axes_pos2)
             xpos2 = copy.copy(pos2)
             xpos2[0] = xpos2[0] + .5
@@ -196,16 +216,26 @@ class MyCanvas(vispy.app.qt.QtSceneCanvas):
             tubeArr = np.array([
             startTube, endTube
             ])
-            print("TUBE ARR: " + str(tubeArr))
-            print("CENTER: " + str(canvas1.view.camera.center))
-
+            warningEnd = ((2 * _changeX) + endTube[0], (2 * _changeY) + endTube[1], (2 * _changeZ) + endTube[2])
+            warningHalf = ((1 * _changeX) + endTube[0], (1 * _changeY) + endTube[1], (1 * _changeZ) + endTube[2])
+            warningTube = np.array([
+            endTube, warningHalf
+            ])
+            warningTube2 = np.array([
+            warningHalf, warningEnd
+            ])
             #TUBE IS ABOUT 1 CENTIMETER IN LENGTH
             if hasattr(TUBE, 'parent'):
                 TUBE.parent = None
                 TUBE = Tube(points=tubeArr, radius=.01, color= "blue", parent=canvas1.view.scene)
-
+                WARNING_TUBE.parent = None
+                WARNING_TUBE = Tube(points=warningTube, radius=.02, color= "orange", parent=canvas1.view.scene)
+                WARNING_TUBE2.parent = None
+                WARNING_TUBE2 = Tube(points=warningTube2, radius=.04, color= "yellow", parent=canvas1.view.scene)
             else:
                 TUBE = Tube(points=tubeArr, radius=.01, color= "blue", parent=canvas1.view.scene)
+                WARNING_TUBE = Tube(points=warningTube, radius=.02, color="orange", parent=canvas1.view.scene)
+                WARNING_TUBE2 = Tube(points=warningTube2, radius=.04, color= "yellow", parent=canvas1.view.scene)
 
             #keyEvent = KeyEvent("key_press", key=Key('W'), text='W')
             #canvas1.view.camera.viewbox_key_event(keyEvent)
@@ -227,6 +257,58 @@ class MyCanvas(vispy.app.qt.QtSceneCanvas):
             #canvas1.view.camera.viewbox_key_event(keyEvent)
             #canvas1.view.camera.view_changed()
 
+    def on_controller_press(self, key):
+        global initialPoseBool
+        global view
+        global initialRotation
+        global initialNeedleRotation
+        global initialPose
+        global canvas1
+        global canvas2
+        global wireframe_filter
+        global wayPointComplete
+        global wayPoints
+        global lines1
+        global lines2
+
+        #change to represent controller key
+        if key == "x" and not wayPointComplete:
+            lines1 = []
+            lines2 = []
+            j = 1
+            for i in range(0, len(wayPoints) - 1):
+                lines1.append(Line(pos = np.array([
+                wayPoints[i], wayPoints[j]
+                ]), color = (1,1,0,1), parent = canvas1.view.scene, width=5))
+                lines2.append(Line(pos = np.array([
+                wayPoints[i], wayPoints[j]
+                ]), color = (1,1,0,1), parent = canvas2.view.scene, width=5))
+                j = j + 1
+            wayPointComplete = True
+            canvas1.view.camera.center = tuple(wayPoints[0])
+            canvas1.update()
+            canvas2.update()
+            return
+        #change to represent controller button
+        #if ord(key.text) == 13 and initialPoseBool == False and wayPointComplete == True:
+        #    canvas1.view.camera.center = canvas2.view.camera.center
+        #    canvas1.view.camera.rotation1 = canvas2.view.camera.rotation1
+        #    canvas1.view.camera.view_changed()
+        #    initialPoseBool = True
+        #    initialPose = list(canvas1.view.camera.center)
+        #    initialRotation = canvas2.view.camera.rotation1
+        #    #TCP_Client.startup()
+            #initialNeedleRotation = TCP_Client.tcp()
+        #    initialNeedleRotation = (0,0,0) #COMMENT OUT WHEN USING TCP_cLIENT MODULE
+        #    canvas1.timer.stop()
+        #    canvas1.timer = vispy.app.Timer(connect = canvas1.line)
+        #    canvas1.timer.start(0.05)
+        #    self.timer.stop()
+        #change to represent controller button; different than first method
+        if key.text == "-" and not wayPointComplete:
+            wayPoints.append(list(canvas1.view.camera.center))
+            print("Added Waypoint")
+
     def on_key_press(self, key):
         global initialPoseBool
         global view
@@ -236,39 +318,21 @@ class MyCanvas(vispy.app.qt.QtSceneCanvas):
         global canvas1
         global canvas2
         global wireframe_filter
-        print("KEY: " + str(key.text))
-        if ord(key.text) == 13:
-            print("CENTER: " + str(self.view.camera.center))
-            print("Rotation: " + str(self.view.camera.rotation1))
-        if ord(key.text) == 13 and initialPoseBool == False:
-            canvas1.view.camera.center = canvas2.view.camera.center
-            canvas1.view.camera.rotation1 = canvas2.view.camera.rotation1
-            canvas1.view.camera.view_changed()
-            initialPoseBool = True
-            initialPose = list(canvas1.view.camera.center)
-            initialRotation = canvas2.view.camera.rotation1
-            #TCP_Client.startup()
-            #initialNeedleRotation = TCP_Client.tcp()
-            initialNeedleRotation = (0,0,0) #COMMENT OUT WHEN USING TCP_cLIENT MODULE
-            canvas1.timer.stop()
-            canvas1.timer = vispy.app.Timer(connect = canvas1.line)
-            canvas1.timer.start(0.05)
-            self.timer.stop()
-            print("ID FROM THE ENTER: " + str(id(self)))
-        #if key.text == ".":
-        #    canvas1.view.camera.zoom_factor = canvas1.view.camera.zoom_factor + 1
-        #if key.text == ",":
-        #    if canvas1.view.camera.zoom_factor - 1 > 0:
-        #        canvas1.view.camera.zoom_factor = canvas1.view.camera.zoom_factor - 1
+        global wayPointComplete
+        global wayPoints
+        global lines1
+        global lines2
+
         if key.text == "+" or key.text == "=":
             self.view.camera.scale_factor = self.view.camera.scale_factor + 1
         if key.text == "-":
             if self.view.camera.scale_factor - 1 > 0:
                 self.view.camera.scale_factor = self.view.camera.scale_factor - 1
         if key.text == ";":
-            wireframe_filter.enabled = not wireframe_filter.enabled
+            canvas2.wireframe_filter.enabled = not canvas2.wireframe_filter.enabled
             canvas2.mesh.color = (1,0,0,.6)
             canvas2.update()
+
     def needleStart(self):
         print("HERE")
 
@@ -521,3 +585,4 @@ if __name__ == "__main__":
     MainWindow.show()
     vispy.app.run()
     sys.exit(app.exec_())
+
