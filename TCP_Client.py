@@ -144,6 +144,116 @@ def getXYZ():
     global shapeZ
     return shapeX, shapeY, shapeZ
 
+def gradientInit():
+    global shapeX 
+    global shapeY
+    global shapeZ 
+    global Oxx 
+    global indX
+    global indX2
+
+    newX = shapeX[0: len(shapeX) - 1]
+    newY = shapeY[0: len(shapeY) - 1]
+    newZ = shapeZ[0: len(shapeZ) - 1]
+
+    #dx = np.gradient(newX) l-shape 
+    dx = np.gradient(np.gradient(newX)) #s-shape ??? 
+    plt.plot(dx)
+    getpoint = plt.ginput(2, 0)   # (x1, y1), (x2, y2) 
+
+    indX = np.array(np.floor(getpoint))
+    Oxx = int(max(range(len(dx)), key = lambda i: dx[i] + indX[0,0]))   #Possible solution for s shape 
+    """
+    line = np.arange(0, indX[1,0] - indX[0, 0])
+    start = int(indX[0, 0])
+    end = int(indX[1, 0])
+    f = np.polyfit(line, dx[start : end], 4)
+    y1 = np.polyval(f,line)
+    dy1 = np.gradient(np.gradient(y1))
+    plt.plot(dy1)
+    Oxx = int(min(range(len(dy1)),key = lambda i: dy1[i]) + indX[0, 0])
+    """
+    print(str("Oxx: " + str(Oxx)))
+    OriginX = newX[Oxx]
+    OriginY = newY[Oxx]
+    OriginZ = newZ[Oxx]
+
+    plt.plot(dx)
+    getpoint = plt.ginput(2, 0)
+
+    indX2 = np.array(np.floor(getpoint))
+
+    AxisXX = np.array([[newX[int(indX2[0,0])] - newX[int(indX[0,0])]], [newY[int(indX2[0,0])] - newY[int(indX[0,0])]], [newZ[int(indX2[0,0])] - newZ[int(indX[0,0])]]])
+
+    AxisYY = np.array([[newX[int(indX2[1,0])] - newX[int(indX[1,0])]], [newY[int(indX2[1,0])] - newY[int(indX[1,0])]], [newZ[int(indX2[1,0])] - newZ[int(indX[1,0])]]])
+    AxisX = AxisXX / np.linalg.norm(AxisXX)
+    AxisY = AxisYY / np.linalg.norm(AxisYY)
+
+    AxisZ = np.cross(AxisX,AxisY, axis=0)
+    AxisY = np.cross(AxisX,AxisZ, axis=0)
+
+def needleByGradient():
+    global shapeX 
+    global shapeY
+    global shapeZ 
+    global indX
+    global indX2
+    global Oxx
+    
+    newX = shapeX[0: len(shapeX) - 1]
+    newY = shapeY[0: len(shapeY) - 1]
+    newZ = shapeZ[0: len(shapeZ) - 1]
+
+    #dx = np.gradient(newX) l-shape 
+    dx = np.gradient(np.gradient(newX)) #s-shape ??? 
+
+    line = np.arange(0, indX[1,0] - indX[0, 0])
+    start = int(indX[0, 0])
+    end = int(indX[1, 0])
+    f = np.polyfit(line, dx[start : end], 4)
+    y1 = np.polyval(f,line)
+    dy1 = np.gradient(np.gradient(y1))
+    previousOxx = Oxx 
+    Oxx = int(min(range(len(dy1)),key = lambda i: dy1[i]) + indX[0, 0])  #changed to max for s shape 
+    changeOxx = Oxx - previousOxx
+
+    OriginX = newX[Oxx]
+    OriginY = newY[Oxx]
+    OriginZ = newZ[Oxx]
+
+    AxisXX = np.array([[newX[int(indX2[0,0])] - newX[int(indX[0,0])]], [newY[int(indX2[0,0])] - newY[int(indX[0,0])]], [newZ[int(indX2[0,0])] - newZ[int(indX[0,0])]]])
+
+    AxisYY = np.array([[newX[int(indX2[1,0])] - newX[int(indX[1,0])]], [newY[int(indX2[1,0])] - newY[int(indX[1,0])]], [newZ[int(indX2[1,0])] - newZ[int(indX[1,0])]]])
+    AxisX = AxisXX / np.linalg.norm(AxisXX)
+    AxisY = AxisYY / np.linalg.norm(AxisYY)
+
+    AxisZ = np.cross(AxisX,AxisY, axis=0)
+    AxisY = np.cross(AxisX,AxisZ, axis=0)
+
+    indX[0, 0] = indX[0,0] + float(changeOxx)
+    indX[1, 0] = indX[1,0] + float(changeOxx)
+    indX2[0,0] = indX2[0,0] + float(changeOxx)
+    indX2[1,0] = indX2[1,0] + float(changeOxx)
+
+    #Relative point calculation 
+
+    halfTube = 5  #half tube length in cm
+
+    relIndex = min(range(int(indX2[0,0]), int(indX2[1,0]) + 1), key = lambda i: math.fabs(shapeX[i] - (shapeX[Oxx] + halfTube))) 
+    relativePoints = []
+    for point in range(relIndex, len(shapeX)):
+        relativePoints.append([shapeX[point] - shapeX[relIndex], shapeY[point] - shapeY[relIndex], shapeZ[point] - shapeZ[relIndex]])
+
+    relativePoints = np.array(relativePoints)
+    theta = math.atan2(AxisZ[2], AxisZ[1])
+    ax = AxisX
+    ay = Rx(theta) * AxisY 
+    az = Rx(theta) * AxisZ
+    RR = np.array([ax, ay, az])
+    dotPoints = np.dot(relativePoints, RR)
+    print(str(Oxx))
+    return dotPoints.tolist()
+
 def parseData(): 
     global sock 
     global previousSlopeIndex
