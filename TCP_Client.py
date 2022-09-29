@@ -11,7 +11,7 @@ import math
 from stl import mesh 
 import numpy as np
 from mpl_toolkits import mplot3d
-from matplotlib import offsetbox, pyplot 
+import matplotlib.pyplot as plt 
 import os 
 import typing 
 import math 
