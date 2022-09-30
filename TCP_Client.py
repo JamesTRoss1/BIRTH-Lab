@@ -237,9 +237,7 @@ def needleByGradient():
 
     #Relative point calculation 
 
-    halfTube = 5  #half tube length in cm
-
-    relIndex = min(range(int(indX2[0,0]), int(indX2[1,0]) + 1), key = lambda i: math.fabs(shapeX[i] - (shapeX[Oxx] + halfTube))) 
+    relIndex = min(range(int(indX2[0,0]), int(indX2[1,0]) + 1), key = lambda i: math.fabs(shapeX[i] - shapeX[Oxx])) 
     relativePoints = []
     for point in range(relIndex, len(shapeX)):
         relativePoints.append([shapeX[point] - shapeX[relIndex], shapeY[point] - shapeY[relIndex], shapeZ[point] - shapeZ[relIndex]])
